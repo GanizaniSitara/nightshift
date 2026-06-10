@@ -23,6 +23,13 @@ A registry of Verifiers keyed by **deliverable type** (web, iOS, PDF, CLI). The 
 The trust boundary for unattended work is derived here: an increment runs unattended only if a
 Verifier covers its deliverable type *and* it needs no physical device or human taste.
 
+## Plugins — `nightshift.plugins`
+
+The public core ships interfaces; concrete implementations are plugins that may live outside this
+repo in a private location and self-register at load time (via `NIGHTSHIFT_PLUGINS` or
+`config["plugin_paths"]`). This is how project-specific verifiers/rubrics stay private while the core
+stays public and generic. See `docs/plugins.md`.
+
 ## The contract — `nightshift.worker`
 
 The instructions injected into every managed run: one increment, persist findings early, branch

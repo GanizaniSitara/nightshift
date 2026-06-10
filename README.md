@@ -62,14 +62,25 @@ src/nightshift/
   verifiers/       the deliverable-type Verifier registry (web / iOS / PDF / CLI)
   watchdog/        the liveness sensor: is the run alive, moving, blocked, or done?
   worker/          the worker contract injected into every managed run
+  plugins.py       loads external/private plugins so they self-register
 ```
+
+## Pluggable architecture (public core, private plugins)
+
+The public core ships only the **interfaces** — the Verifier contract, the registry, the
+orchestration records, the plugin loader. Concrete, project-specific implementations are **plugins**
+that can live entirely **outside this repo, in a private location**, and self-register at load time.
+That keeps personal/project detail (build commands, rubrics, paths) out of the public OSS core.
+Point Nightshift at your private plugins with `NIGHTSHIFT_PLUGINS` (see `docs/plugins.md`). Most/all
+real plugins are expected to be private for now; the public repo is the framework.
 
 ## Status
 
-- **Built:** the liveness watchdog (process / transcript / heartbeat → HEALTHY · STALLED · CRASHED ·
-  DONE, de-duped alerting). Runs as a background service.
-- **Scaffolded (contracts + stubs):** the Verifier registry, orchestration records, dispatcher,
-  worker contract, end-of-shift report.
+- **Built:** the liveness watchdog logic (process / transcript / heartbeat → HEALTHY · STALLED ·
+  CRASHED · DONE, de-duped alerting). Runs as a **plain on-demand module/CLI**; a Windows service is
+  an *optional* wrapper, not required.
+- **Scaffolded (contracts + stubs):** the Verifier registry, the plugin loader, orchestration
+  records, dispatcher, worker contract, end-of-shift report.
 - **Next:** the first real Verifier (web), then the thinnest shift loop around it. Nothing heavier
   gets built until a Verifier verdict has earned trust.
 

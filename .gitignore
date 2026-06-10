@@ -16,4 +16,9 @@ state/
 config/nightshift.config.json
 *.local.json
 
+# Private/project-specific plugins live outside the public repo. If you keep
+# them in-tree for convenience, these directories are never committed.
+plugins.local/
+private/
+
 .DS_Store

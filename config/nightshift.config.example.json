@@ -12,6 +12,16 @@
   "mcp_url": "http://127.0.0.1:8876/mcp",
   "state_file": "state/nightshift-state.json",
 
+  "launcher_path": "<path to your session launcher, e.g. C:/scripts/launch.ps1>",
+  "default_tool": "claude",
+  "max_run_seconds": 7200,
+  "launch_info_timeout_seconds": 30,
+  "runs_dir": "state/runs",
+  "reports_dir": "state/reports",
+  "evidence_dir": "state/evidence",
+  "eval_tool": "claude",
+  "eval_model": "sonnet",
+
   "watchdog_note_grace_seconds": 60,
   "alert_requires_managed": true,
   "managed_launch_fields": ["RunnerManaged", "WatchdogManaged", "WatchdogOptIn", "Watchdog"],

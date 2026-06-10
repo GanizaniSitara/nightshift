@@ -28,11 +28,21 @@ default), no personal email/SMTP identities (config-driven, email **off** by def
 from `USERPROFILE`/config, and the MCP/managed-marker identities are rebranded to `nightshift`.
 `tests/test_watchdog.py` covers it.
 
-### Deferred (optional): the Windows service wrapper
-The pywin32 service host (`service_watchdog.py`) was intentionally **not** migrated — per the
-"not a service for now" decision. The plain module is the default. If a service is wanted later,
-add the wrapper with: service identity `PythonNightshiftWatchdog`, config/env-driven profile home
-(no hardcoded user path), reading the same `nightshift.config.json`.
+### Optional: deploy as a Windows service
+The plain module is the default, but you can run the watchdog always-on as a Windows service
+(`service_watchdog.py`, pywin32). Service identity `PythonNightshiftWatchdog`. Operate it from the
+repo root:
 
-The legacy `PythonAgentRunnerWatchdog` service still runs from the old `agent-runner` location and
-is untouched; retiring it is a separate, deliberate step (stop/remove under elevation).
+```
+refresh.cmd   :: install / reinstall / start (self-elevates via UAC)
+remove.cmd    :: stop and remove
+```
+
+Both self-elevate and are location-independent. If `python` on PATH lacks pywin32, set `PY` first:
+`set "PY=C:\path\to\env\python.exe"`. Under LocalSystem, point the service at your real profile with
+`NIGHTSHIFT_USER_HOME=C:\Users\you` (or just use absolute paths in `nightshift.config.json`). The
+service reads `config\nightshift.config.json` (override with `NIGHTSHIFT_WATCHDOG_CONFIG`).
+
+The legacy `PythonAgentRunnerWatchdog` service from the old `agent-runner` location is separate and
+untouched; retire it deliberately (its own `remove.cmd`) before installing this one to avoid two
+watchdogs running at once.

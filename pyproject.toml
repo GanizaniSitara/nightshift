@@ -1,0 +1,24 @@
+[project]
+name = "nightshift"
+version = "0.1.0"
+description = "A shift manager that turns unattended AI-agent capacity into verified, incremental progress toward a goal."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "GanizaniSitara" }]
+keywords = ["agents", "orchestration", "automation", "ci", "llm"]
+
+dependencies = []
+
+[project.optional-dependencies]
+watchdog = ["psutil>=5.9"]
+service = ["pywin32>=306"]          # Windows service host (one host option)
+web = ["playwright>=1.40"]          # web-app Verifier
+dev = ["pytest>=7"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]

@@ -1,0 +1,19 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+build/
+dist/
+*.egg-info/
+
+# Runtime artifacts
+logs/
+state/
+
+# Real config carries local paths + SMTP credentials. Never commit it.
+# Ship config/nightshift.config.example.json only.
+config/nightshift.config.json
+*.local.json
+
+.DS_Store

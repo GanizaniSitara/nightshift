@@ -1,0 +1,31 @@
+{
+  "_comment": "Copy to nightshift.config.json (gitignored) and fill in real paths/secrets. Paths use forward slashes. ${USERPROFILE}-style values are illustrative — substitute your own.",
+
+  "poll_seconds": 120,
+  "stall_seconds": 900,
+  "heartbeat_seconds": 1800,
+
+  "tasks_root": "<your tasks root, e.g. ${USERPROFILE}/tasks>",
+  "launch_info_glob": "<tasks root>/in-progress/*.launch-info.json",
+  "claude_projects_root": "<home>/.claude/projects",
+  "codex_sessions_root": "<home>/.codex/sessions",
+  "mcp_url": "http://127.0.0.1:8876/mcp",
+  "state_file": "state/nightshift-state.json",
+
+  "watchdog_note_grace_seconds": 60,
+  "alert_requires_managed": true,
+  "managed_launch_fields": ["RunnerManaged", "WatchdogManaged", "WatchdogOptIn", "Watchdog"],
+  "managed_by_values": ["nightshift"],
+
+  "email": {
+    "enabled": false,
+    "smtp_host": "localhost",
+    "smtp_port": 587,
+    "smtp_starttls": false,
+    "username": "<smtp user>",
+    "password": "<set via NIGHTSHIFT_SMTP_PASSWORD env var, not here>",
+    "from": "<from address>",
+    "to": "<alert recipient>",
+    "subject_prefix": "NIGHTSHIFT"
+  }
+}

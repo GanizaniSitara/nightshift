@@ -20,23 +20,19 @@ loop is just `loop`. The Windows service wrapper (`service_watchdog.py`, pywin32
 deferred — we don't need it to iterate, and it adds elevation/cutover friction. Treat the service as
 one possible host wrapper to add later, not a requirement.
 
-## Migration checklist (in progress)
+## Status: migrated (runs as a plain module)
 
-The working implementation currently lives outside this repo and is being migrated here with a
-careful scrub, because this is a public repo. Steps:
+`watchdog.py` is in the repo and runs via `python -m nightshift.watchdog [once|loop|status]`.
+Scrubbed for public release: no literal SMTP password (uses `NIGHTSHIFT_SMTP_PASSWORD`, empty
+default), no personal email/SMTP identities (config-driven, email **off** by default), paths derive
+from `USERPROFILE`/config, and the MCP/managed-marker identities are rebranded to `nightshift`.
+`tests/test_watchdog.py` covers it.
 
-1. Bring in `watchdog.py` (the logic) and add a `__main__.py` so `python -m nightshift.watchdog`
-   runs `status | once | loop`.
-2. **Scrub for public release:**
-   - SMTP password default → require `NIGHTSHIFT_SMTP_PASSWORD` env var (no literal default).
-   - Replace personal email/SMTP identities with config-driven values.
-   - Remove any personal paths from defaults; everything comes from `nightshift.config.json`.
-3. Fix imports/tests to `nightshift.watchdog.*` and bring `test_watchdog.py` into `tests/`.
-4. Verify: `python -m unittest discover -s tests` passes; a low-threshold dry-run discriminates
-   stalled vs healthy; no literal secrets/paths remain (`git grep` clean before commit).
-5. **Optional, later:** `service_watchdog.py` (pywin32) as a Windows service wrapper —
-   rename identity to `PythonNightshiftWatchdog`, env prefix `AGENT_RUNNER_*` → `NIGHTSHIFT_*`,
-   config/env-driven profile home (drop the hardcoded `C:\Users\<name>` pin). Not needed to run.
+### Deferred (optional): the Windows service wrapper
+The pywin32 service host (`service_watchdog.py`) was intentionally **not** migrated — per the
+"not a service for now" decision. The plain module is the default. If a service is wanted later,
+add the wrapper with: service identity `PythonNightshiftWatchdog`, config/env-driven profile home
+(no hardcoded user path), reading the same `nightshift.config.json`.
 
-The existing `PythonAgentRunnerWatchdog` service keeps running from its old location meanwhile;
-nothing here hot-edits it. The plain module is the default; the service is a deferred add-on.
+The legacy `PythonAgentRunnerWatchdog` service still runs from the old `agent-runner` location and
+is untouched; retiring it is a separate, deliberate step (stop/remove under elevation).

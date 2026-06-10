@@ -1,29 +1,56 @@
-"""Shift lifecycle: start a shift, pick the next useful step, dispatch, verify, report.
+"""Shift lifecycle: open a shift, pick the next step, route it.
 
-This is the loop, kept deliberately thin. It selects a step (ready plan, else
-bounded design/recon, else verify earlier work), turns it into a managed run
-prompt under the worker contract, dispatches one run, lets the watchdog watch it,
-and on completion either verifies + records or routes to the human-gated queue.
-
-Nothing here is built until a Verifier has earned trust on a real increment.
+Kept deliberately thin. ``route_or_run`` applies the trust boundary — an
+increment that no Verifier can judge unattended (or that needs a device/human)
+is routed to the human-gated queue (a BLOCKED run) instead of being fired blind.
+Actual process launch is the dispatcher's job (out of scope here).
 """
 
 from __future__ import annotations
 
-from ..verifiers import Increment, registry
-from .records import Goal, Run, Shift
+import datetime as dt
+
+from ..verifiers import registry
+from ..verifiers.base import Increment
+from .records import Goal, Run, RunStatus, Shift
 
 
-def start(goal: Goal, *, seats: int = 1) -> Shift:
-    """Open a shift for a goal. Implemented after the first Verifier is proven."""
-    raise NotImplementedError("shift.start")
+def _now() -> str:
+    return dt.datetime.now(dt.timezone.utc).isoformat()
 
 
-def pick_next_step(shift: Shift) -> Increment | None:
-    """Choose the next useful increment toward the goal, or None if no safe work remains."""
-    raise NotImplementedError("shift.pick_next_step")
+def start(goal: Goal, *, seats: int = 1, started_at: str | None = None) -> Shift:
+    return Shift(id=f"shift-{goal.id}", goal_id=goal.id, started_at=started_at or _now(), seats=seats)
 
 
-def route_or_run(shift: Shift, increment: Increment) -> Run:
-    """Dispatch unattended if ``registry.can_verify_unattended``; else human-gated queue."""
-    raise NotImplementedError("shift.route_or_run")
+def pick_next_step(
+    candidates: list[Increment], done_ids: set[str] | None = None
+) -> Increment | None:
+    """Return the next not-yet-done candidate increment, or None if none remain."""
+    done = done_ids or set()
+    for increment in candidates:
+        if increment.id not in done:
+            return increment
+    return None
+
+
+def route_or_run(shift: Shift, increment: Increment, *, run_id: str, tool: str = "claude") -> Run:
+    """Decide unattended vs human-gated for an increment and return the resulting Run."""
+    if registry.can_verify_unattended(increment):
+        return Run(
+            id=run_id,
+            shift_id=shift.id,
+            increment_id=increment.id,
+            tool=tool,
+            status=RunStatus.PENDING,
+            notes="unattended: verifier available, no device/human required",
+        )
+    reason = ", ".join(increment.requires) or "no verifier for deliverable type"
+    return Run(
+        id=run_id,
+        shift_id=shift.id,
+        increment_id=increment.id,
+        tool=tool,
+        status=RunStatus.BLOCKED,
+        notes=f"human-gated: {reason}",
+    )

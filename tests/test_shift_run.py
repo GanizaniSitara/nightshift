@@ -62,6 +62,15 @@ class MonitorTests(unittest.TestCase):
         self.assertEqual(run.status, RunStatus.DONE)
         self.assertIsNotNone(run.ended_at)
 
+    def test_done_cleans_up_orphaned_launch_info(self):
+        slug = "TECH-907-mon"
+        (Path(self.tmp.name) / "done" / f"{slug}.md").write_text("x", encoding="utf-8")
+        leftover = Path(self.tmp.name) / "in-progress" / f"{slug}.launch-info.json"
+        leftover.write_text("{}", encoding="utf-8")
+        run = shift.monitor_run(_run(slug), _inc(slug), self.config)
+        self.assertEqual(run.status, RunStatus.DONE)
+        self.assertFalse(leftover.exists())
+
     def test_dead_process_terminates_crashed(self):
         slug = "TECH-902-mon"
         with mock.patch.object(shift, "session_alive", return_value=False):

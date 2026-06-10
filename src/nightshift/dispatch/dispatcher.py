@@ -115,13 +115,23 @@ def dispatch_run(increment: Increment, *, tool: str | None = None, config: dict[
         started_at=now,
     )
 
-    # 1-2. Deliver contract + brief through the ticket (launcher injects task file verbatim).
+    # 1. Move the ticket to in-progress THROUGH the tasks MCP before launching.
+    # The launcher would otherwise file-move it itself WITHOUT updating frontmatter,
+    # and the MCP (frontmatter = source of truth) then re-homes the file to backlog
+    # mid-run, orphaning the launch-info. Moving via MCP first keeps state coherent
+    # and the launcher takes the already-in-progress path (no file move of its own).
     task_id = task_id_from_slug(slug) or slug
-    prompt = build_run_prompt(increment)
     client = TasksMcpClient(
         str(config.get("mcp_url", "http://127.0.0.1:8876/mcp")),
         float(config.get("mcp_timeout_seconds", 10)),
     )
+    tasks_root = Path(str(config.get("tasks_root", "")))
+    already_in_progress = any((tasks_root / "in-progress").glob(f"{slug}*.md"))
+    if not already_in_progress:
+        client.move_task(task_id, "in-progress")
+
+    # 2. Deliver contract + brief through the ticket (launcher injects task file verbatim).
+    prompt = build_run_prompt(increment)
     client.append_task_note(task_id, prompt, heading="Managed run")
 
     # 3. Fire the launcher.
@@ -134,7 +144,6 @@ def dispatch_run(increment: Increment, *, tool: str | None = None, config: dict[
         return run
 
     # 4. Stamp managed markers so the deployed watchdog tracks/alerts this run.
-    tasks_root = Path(str(config.get("tasks_root", "")))
     launch_info = tasks_root / "in-progress" / f"{slug}.launch-info.json"
     if wait_for_launch_info(launch_info, timeout_seconds=float(config.get("launch_info_timeout_seconds", 30))):
         stamp_managed(launch_info)

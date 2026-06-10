@@ -115,6 +115,14 @@ def monitor_run(
 
     run.ended_at = dt.datetime.now(dt.timezone.utc).isoformat()
 
+    if run.status == RunStatus.DONE:
+        # The agent signals done via the tasks MCP move, which doesn't remove the
+        # launcher's metadata file (the launcher's own `done` command would have).
+        # Clean it up here so no orphaned launch-info lingers in in-progress/.
+        leftover = Path(str(config.get("tasks_root", ""))) / "in-progress" / f"{slug}.launch-info.json"
+        if leftover.exists():
+            leftover.unlink()
+
     if run.status == RunStatus.DONE and increment.target and increment.rubric_path:
         verifier = registry.get(increment.deliverable_type)
         if verifier is not None:

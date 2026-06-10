@@ -75,7 +75,7 @@ class DispatchTests(unittest.TestCase):
             "launch_info_timeout_seconds": 0.2,
         }
 
-    def test_successful_dispatch_appends_note_launches_stamps_and_records(self):
+    def test_successful_dispatch_moves_ticket_first_then_notes_launches_stamps_records(self):
         with tempfile.TemporaryDirectory() as tmp:
             slug = "TECH-900-test-run"
             in_prog = Path(tmp) / "in-progress"
@@ -83,9 +83,10 @@ class DispatchTests(unittest.TestCase):
             li = in_prog / f"{slug}.launch-info.json"
             li.write_text(json.dumps({"TaskSlug": slug, "PID": 1}), encoding="utf-8")
 
-            notes = []
+            calls = []
             fake_client = mock.Mock()
-            fake_client.append_task_note.side_effect = lambda tid, note, heading: notes.append((tid, heading))
+            fake_client.move_task.side_effect = lambda tid, status, **kw: calls.append(("move", tid, status))
+            fake_client.append_task_note.side_effect = lambda tid, note, heading: calls.append(("note", tid, heading))
 
             with mock.patch.object(dispatcher, "TasksMcpClient", return_value=fake_client), mock.patch.object(
                 dispatcher.subprocess, "run",
@@ -94,11 +95,31 @@ class DispatchTests(unittest.TestCase):
                 run = dispatcher.dispatch_run(_inc(slug), config=self._config(tmp))
 
             self.assertEqual(run.status, RunStatus.RUNNING)
-            self.assertEqual(notes, [("TECH-900", "Managed run")])
+            # MCP move (frontmatter+file coherent) MUST precede the brief note and launch.
+            self.assertEqual(calls[0], ("move", "TECH-900", "in-progress"))
+            self.assertEqual(calls[1], ("note", "TECH-900", "Managed run"))
             stamped = json.loads(li.read_text(encoding="utf-8"))
             self.assertEqual(stamped["ManagedBy"], "nightshift")
             records = list((Path(tmp) / "runs").glob("*.json"))
             self.assertEqual(len(records), 1)
+
+    def test_dispatch_skips_move_when_ticket_already_in_progress(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            slug = "TECH-900-test-run"
+            in_prog = Path(tmp) / "in-progress"
+            in_prog.mkdir()
+            (in_prog / f"{slug}.md").write_text("---\ntask: TECH-900\n---\n", encoding="utf-8")
+            (in_prog / f"{slug}.launch-info.json").write_text(
+                json.dumps({"TaskSlug": slug, "PID": 1}), encoding="utf-8"
+            )
+            fake_client = mock.Mock()
+            with mock.patch.object(dispatcher, "TasksMcpClient", return_value=fake_client), mock.patch.object(
+                dispatcher.subprocess, "run",
+                return_value=subprocess.CompletedProcess([], 0, stdout="", stderr=""),
+            ):
+                dispatcher.dispatch_run(_inc(slug), config=self._config(tmp))
+            fake_client.move_task.assert_not_called()
+            fake_client.append_task_note.assert_called_once()
 
     def test_launcher_failure_marks_crashed(self):
         with tempfile.TemporaryDirectory() as tmp:

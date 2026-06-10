@@ -591,6 +591,24 @@ class TasksMcpClient:
         if isinstance(parsed, dict) and parsed.get("error"):
             raise McpError(json.dumps(parsed["error"], ensure_ascii=False))
 
+    def move_task(self, task_id: str, status: str, strategy: str = "error") -> None:
+        """Move a task between backlog/in-progress/blocked/done (frontmatter + file together)."""
+        if not self.session_id:
+            self.initialize()
+        payload = {
+            "jsonrpc": "2.0",
+            "id": self._next_id(),
+            "method": "tools/call",
+            "params": {
+                "name": "move_task",
+                "arguments": {"task_id": task_id, "status": status, "strategy": strategy},
+            },
+        }
+        _, body = self._post(payload)
+        parsed = parse_mcp_response(body)
+        if isinstance(parsed, dict) and parsed.get("error"):
+            raise McpError(json.dumps(parsed["error"], ensure_ascii=False))
+
     def _next_id(self) -> int:
         value = self.next_id
         self.next_id += 1

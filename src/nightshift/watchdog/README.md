@@ -28,21 +28,28 @@ default), no personal email/SMTP identities (config-driven, email **off** by def
 from `USERPROFILE`/config, and the MCP/managed-marker identities are rebranded to `nightshift`.
 `tests/test_watchdog.py` covers it.
 
-### Optional: deploy as a Windows service
+### Optional: deploy as a Windows service (to `C:\servers`)
 The plain module is the default, but you can run the watchdog always-on as a Windows service
-(`service_watchdog.py`, pywin32). Service identity `PythonNightshiftWatchdog`. Operate it from the
-repo root:
+(`service_watchdog.py`, pywin32), service identity `PythonNightshiftWatchdog`. The deploy model
+separates **source** (this repo) from **runtime** (`C:\servers\nightshift`):
 
 ```
-refresh.cmd   :: install / reinstall / start (self-elevates via UAC)
-remove.cmd    :: stop and remove
+refresh.cmd   :: from the SOURCE repo: stop+remove old service, copy runtime to
+              :: C:\servers\nightshift, then install+start from there. Self-elevates.
+remove.cmd    :: stop and remove the service by name (run from source or runtime).
 ```
 
-Both self-elevate and are location-independent. If `python` on PATH lacks pywin32, set `PY` first:
-`set "PY=C:\path\to\env\python.exe"`. Under LocalSystem, point the service at your real profile with
-`NIGHTSHIFT_USER_HOME=C:\Users\you` (or just use absolute paths in `nightshift.config.json`). The
-service reads `config\nightshift.config.json` (override with `NIGHTSHIFT_WATCHDOG_CONFIG`).
+Order matters and is deliberate: a **running service locks its own files**, so `refresh.cmd`
+stops + removes the existing registration *before* copying — never copy first. It also removes
+**by service name**, so changing the deploy path is safe. Run the **source** copy of `refresh.cmd`,
+not the one under `C:\servers\nightshift` (the deploy step would overwrite a running script).
 
-The legacy `PythonAgentRunnerWatchdog` service from the old `agent-runner` location is separate and
-untouched; retire it deliberately (its own `remove.cmd`) before installing this one to avoid two
-watchdogs running at once.
+- Interpreter defaults to the local Python with pywin32; override with `set "PY=...python.exe"`.
+- Runtime config: `C:\servers\nightshift\config\nightshift.config.json` (create from the `.example`;
+  override path with `NIGHTSHIFT_WATCHDOG_CONFIG`).
+- Under LocalSystem, point at your real profile via `NIGHTSHIFT_USER_HOME=C:\Users\you`, or run the
+  service under your own account, or just use absolute paths in the config.
+
+**Before first install:** retire the legacy `PythonAgentRunnerWatchdog` (old `agent-runner` repo, its
+own `remove.cmd`) — it's a different service name, so `refresh.cmd` won't touch it, and two watchdogs
+polling the same sessions would double-alert.

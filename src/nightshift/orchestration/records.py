@@ -64,6 +64,7 @@ class Run:
     ended_at: str | None = None
     evidence_paths: list[str] = field(default_factory=list)
     notes: str = ""
+    verification: dict | None = None  # {verdict, findings:[{rubric_item,verdict,notes}], screenshots, notes}
 
 
 @dataclass

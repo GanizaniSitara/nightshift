@@ -88,7 +88,7 @@ def session_pid(slug: str, config: dict[str, Any]) -> int:
     return info.pid if info else 0
 
 
-def _note(config: dict[str, Any], task_id: str, note: str) -> None:
+def _note(config: dict[str, Any], task_id: str, note: str, heading: str = "Nightshift") -> None:
     """Best-effort progress note to the ticket (also bumps heartbeat)."""
     from ..watchdog.watchdog import TasksMcpClient
 
@@ -97,7 +97,7 @@ def _note(config: dict[str, Any], task_id: str, note: str) -> None:
             str(config.get("mcp_url", "http://127.0.0.1:8876/mcp")),
             float(config.get("mcp_timeout_seconds", 10)),
         )
-        client.append_task_note(task_id, note, heading="Nightshift nudge")
+        client.append_task_note(task_id, note, heading=heading)
     except Exception:
         pass
 
@@ -200,6 +200,28 @@ def monitor_run(
                 run.notes = (run.notes + "; " if run.notes else "") + f"verifier error: {type(exc).__name__}: {exc}"[:200]
                 return run
             run.evidence_paths.extend(result.evidence_paths)
+            findings = [
+                {"rubric_item": f.rubric_item, "verdict": f.verdict.value, "notes": f.notes}
+                for f in result.vision_findings
+            ]
+            run.verification = {
+                "verdict": result.verdict.value,
+                "findings": findings,
+                "screenshots": result.screenshots,
+                "notes": result.notes,
+            }
             run.status = RunStatus.VERIFIED if result.verdict == Verdict.PASS else RunStatus.NEEDS_REVIEW
             run.notes = (run.notes + "; " if run.notes else "") + f"verifier verdict={result.verdict.value}"
+            if result.verdict != Verdict.PASS:
+                fails = [
+                    f"- [{f['verdict']}] {f['rubric_item']}: {f['notes']}"
+                    for f in findings if f["verdict"] != "pass"
+                ] or ["(verifier returned no per-rubric detail)"]
+                _note(
+                    config, task_id,
+                    f"Verifier verdict {result.verdict.value} on {increment.target}.\n"
+                    f"Findings:\n" + "\n".join(fails)
+                    + (f"\nScreenshot: {';'.join(result.screenshots)}" if result.screenshots else ""),
+                    heading="Verifier",
+                )
     return run

@@ -60,6 +60,13 @@ Recon it (read README, layout, key files) before planning.
   use deliverable "cli". If it genuinely needs a physical device or human
   taste to judge, add "device" or "human" to requires — such increments are
   routed to the human instead of attempted blind.
+- CRITICAL for web targets: the target URL must VISIBLY EXERCISE the change in
+  one shot. The verifier loads it and screenshots the rendered page — it cannot
+  type, click, scroll, or log in. Do NOT point at the bare app root if the
+  feature only appears after an action. For a search/results feature use a query
+  URL that returns results (e.g. .../?q=<term>&limit=10); for a detail/record
+  feature use a deep link to a specific record if the repo lets you form one.
+  rubric_lines must describe what is visible in THAT rendered state.
 - Be conservative: do not invent work beyond the ask; prefer fewer, sharper
   increments.
 

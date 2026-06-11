@@ -38,16 +38,25 @@ class WebVerifier(Verifier):
                 notes="no target URL on increment",
             )
 
-        shot = capture(increment.target, out_dir, timeout_ms=int(cfg.get("nav_timeout_ms", 30000)))
+        shot = capture(
+            increment.target, out_dir,
+            full_page=bool(cfg.get("web_full_page", True)),  # see below-the-fold results
+            nav_timeout_ms=int(cfg.get("nav_timeout_ms", 60000)),
+            screenshot_timeout_ms=int(cfg.get("screenshot_timeout_ms", 60000)),
+            settle_ms=int(cfg.get("settle_ms", 700)),
+        )
         result = VerificationResult(
             deliverable_type=self.deliverable_type,
             verdict=Verdict.FAIL,
-            built=shot.loaded,
-            screenshots=[shot.screenshot_path],
-            evidence_paths=[shot.screenshot_path],
+            built=shot.captured,
+            screenshots=[shot.screenshot_path] if shot.captured else [],
+            evidence_paths=[shot.screenshot_path] if shot.captured else [],
         )
-        if not shot.loaded:
-            result.notes = f"page did not load: {shot.error}"
+        # Gate on HAVING a screenshot, not on navigation: slow apps can miss
+        # domcontentloaded yet still render a judgeable page.
+        if not shot.captured:
+            loaded = "loaded but " if shot.loaded else "did not load; "
+            result.notes = f"no screenshot ({loaded}{shot.error})"
             return result
 
         rubric_text = ""

@@ -26,7 +26,8 @@ class WebVerifierTests(unittest.TestCase):
 
     def test_unloadable_page_is_fail_without_calling_evaluator(self):
         inc = Increment(id="i", summary="x", deliverable_type="web", target="http://x")
-        bad = Capture(url="http://x", screenshot_path="s.png", loaded=False, error="boom")
+        # no screenshot captured -> fail without calling the evaluator
+        bad = Capture(url="http://x", screenshot_path="", loaded=False, error="boom")
         with mock.patch.object(web, "capture", return_value=bad), mock.patch.object(
             web, "evaluate_screenshot"
         ) as ev:
@@ -34,7 +35,19 @@ class WebVerifierTests(unittest.TestCase):
         ev.assert_not_called()
         self.assertEqual(result.verdict, Verdict.FAIL)
         self.assertFalse(result.built)
-        self.assertIn("did not load", result.notes)
+        self.assertIn("no screenshot", result.notes)
+
+    def test_screenshot_without_full_load_is_still_evaluated(self):
+        # slow app: domcontentloaded missed but a screenshot was captured -> judge it
+        inc = Increment(id="i", summary="x", deliverable_type="web", target="http://x")
+        slow = Capture(url="http://x", screenshot_path="s.png", loaded=False, title="")
+        findings = [VisionFinding(rubric_item="header", verdict=Verdict.PASS)]
+        with mock.patch.object(web, "capture", return_value=slow), mock.patch.object(
+            web, "evaluate_screenshot", return_value=(Verdict.PASS, findings, "{}")
+        ):
+            result = self.verifier.verify(inc, config={})
+        self.assertEqual(result.verdict, Verdict.PASS)
+        self.assertTrue(result.built)
 
     def test_loaded_page_runs_evaluator_and_returns_verdict(self):
         inc = Increment(id="i", summary="x", deliverable_type="web", target="http://x")

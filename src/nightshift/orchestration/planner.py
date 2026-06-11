@@ -67,6 +67,10 @@ Recon it (read README, layout, key files) before planning.
   URL that returns results (e.g. .../?q=<term>&limit=10); for a detail/record
   feature use a deep link to a specific record if the repo lets you form one.
   rubric_lines must describe what is visible in THAT rendered state.
+- Every rubric_line must be judgeable from that ONE screenshot. Do NOT put
+  interactive behaviour (keypresses, clicks, downloads), console/network checks,
+  or other-screen behaviour in rubric_lines — those belong in the brief's
+  definition-of-done for the worker to self-check, not in the verifier rubric.
 - Be conservative: do not invent work beyond the ask; prefer fewer, sharper
   increments.
 

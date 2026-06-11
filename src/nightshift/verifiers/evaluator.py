@@ -46,11 +46,13 @@ Evaluate the screenshot against this rubric. Each non-empty, non-heading line is
 Also consider these acceptance criteria:
 {criteria}
 
-For each rubric check, decide "pass", "fail", or "needs-human" (use "needs-human" only for
-subjective/taste items you cannot judge objectively from the image). Then give an overall verdict:
-- "fail" if any objective check fails,
-- otherwise "needs-human" if any check is needs-human,
+For each rubric check, decide "pass", "fail", or "needs-human". Use "needs-human" ONLY when you
+genuinely cannot judge the item from this single screenshot (e.g. it concerns another screen or a
+console). Then give an overall verdict:
+- "fail" if any check you CAN judge fails,
 - otherwise "pass".
+A "needs-human" item is recorded in findings for later human review but does NOT block: it must not
+make the overall verdict "fail". Never return "needs-human" as the overall verdict.
 
 Output ONLY a single JSON object, no prose, of the form:
 {{"verdict":"pass|fail|needs-human","findings":[{{"rubric_item":"...","verdict":"pass|fail|needs-human","notes":"..."}}]}}

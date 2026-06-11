@@ -94,6 +94,19 @@ def _load_increment(path: Path, order: int, goal_dir: Path) -> IncrementSpec:
     )
 
 
+def assert_ready(goal: GoalSpec) -> None:
+    """The human approval gate: a shift may only execute a goal marked ready.
+
+    The planner writes drafts; a person reviews and flips ``status: ready`` in
+    goal.md. Automated planning, manual approval.
+    """
+    if goal.status != "ready":
+        raise PermissionError(
+            f"goal '{goal.id}' has status '{goal.status}' — review the draft and set "
+            f"'status: ready' in {goal.path / 'goal.md' if goal.path else 'goal.md'} to approve it"
+        )
+
+
 def load_goal(goals_dir: str | Path, goal_id: str) -> GoalSpec:
     goal_dir = Path(goals_dir) / goal_id
     goal_md = goal_dir / "goal.md"

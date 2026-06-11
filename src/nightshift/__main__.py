@@ -74,7 +74,7 @@ def cmd_run(args: argparse.Namespace) -> int:
 
 def cmd_shift(args: argparse.Namespace) -> int:
     from .orchestration.goal_shift import run_shift
-    from .orchestration.goals import load_goal
+    from .orchestration.goals import assert_ready, load_goal
 
     config = load_config(Path(args.config) if args.config else None)
     plugins.load_plugins(config=config)
@@ -87,6 +87,12 @@ def cmd_shift(args: argparse.Namespace) -> int:
     if not goal.increments:
         print(f"goal {goal.id} has no increments")
         return 1
+    if not args.dry_run:
+        try:
+            assert_ready(goal)
+        except PermissionError as exc:
+            print(f"NOT APPROVED: {exc}")
+            return 1
     if args.dry_run:
         print(f"goal {goal.id}: {goal.title} — {len(goal.increments)} increment(s)")
         for spec in goal.increments:
@@ -111,6 +117,38 @@ def cmd_shift(args: argparse.Namespace) -> int:
     return 0 if landed_all else 2
 
 
+def cmd_plan(args: argparse.Namespace) -> int:
+    from .orchestration.goals import load_goal
+    from .orchestration.planner import run_planner, write_goal_draft
+
+    config = load_config(Path(args.config) if args.config else None)
+    goals_dir = args.goals_dir or config.get("goals_dir")
+    if not goals_dir:
+        print("no goals dir: pass --goals-dir or set goals_dir in config")
+        return 1
+    repo = str(Path(args.repo).resolve())
+
+    print(f"planning against {repo} (headless {config.get('plan_tool', 'claude')} session)...")
+    plan = run_planner(args.ask, repo, config=config, max_increments=args.max_increments)
+    goal_dir = write_goal_draft(
+        plan, goals_dir, repo=repo,
+        task_prefix=args.task_prefix, tool=str(config.get("default_tool", "claude")),
+    )
+
+    goal = load_goal(goals_dir, goal_dir.name)
+    print()
+    print(f"DRAFT goal written: {goal_dir}")
+    print(f"  {goal.title}")
+    print(f"  branch {goal.branch} · {len(goal.increments)} increment(s):")
+    for spec in goal.increments:
+        gate = " [human-gated]" if {"device", "human"} & set(spec.requires) else ""
+        verify = " +rubric" if spec.rubric_path else ""
+        print(f"    {spec.order:02d} {spec.slug} ({spec.deliverable_type}{verify}){gate}")
+    print()
+    print("Review the draft, then set 'status: ready' in goal.md to approve it for a shift.")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="nightshift")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -126,6 +164,15 @@ def main(argv: list[str] | None = None) -> int:
     run_p.add_argument("--config", default=None)
     run_p.add_argument("--no-launch", action="store_true", help="monitor only; don't dispatch")
     run_p.set_defaults(func=cmd_run)
+
+    plan_p = sub.add_parser("plan", help="planner pass: decompose an ask into a DRAFT goal for approval")
+    plan_p.add_argument("ask", help="the high-level ask, in plain language")
+    plan_p.add_argument("--repo", required=True, help="project repo/working dir the planner recons")
+    plan_p.add_argument("--goals-dir", default=None)
+    plan_p.add_argument("--config", default=None)
+    plan_p.add_argument("--task-prefix", default="TECH", help="ticket prefix for the goal's transport tickets")
+    plan_p.add_argument("--max-increments", type=int, default=5)
+    plan_p.set_defaults(func=cmd_plan)
 
     shift_p = sub.add_parser("shift", help="work a goal: ordered increments, shared branch, goal report")
     shift_p.add_argument("goal", help="goal id (folder name under the goals dir)")

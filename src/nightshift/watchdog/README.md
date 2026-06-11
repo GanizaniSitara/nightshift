@@ -15,21 +15,26 @@ markers so ad-hoc sessions don't generate noise, and emits a ticket note + optio
 
 ## Auto-unstick nudger (`nudger.py` + `nudge_console.ps1`)
 
-The dominant overnight failure on subscription seats is the rate-limit pause: the session parks on a
-prompt forever waiting for a human. The nudger revives it — it peeks the session's console and, on a
-**confirmed** recoverable prompt, injects the keystroke that resumes it:
+The dominant overnight failure on subscription seats is a worker parked on a limit prompt forever
+waiting for a human. The nudger reads the session's console and classifies it against **per-tool
+rules** (`nudger.BUILTIN_RULES`, overridable via `config["nudge_rules"]`):
 
-- rate-limit prompt → dismiss + type `continue`
-- context/compaction prompt → `/compact`
-- working / no prompt → nothing (it never injects into a healthy or ambiguous session)
+- **Claude** stalls have a clean keystroke revival, so its rules `inject`: rate-limit → dismiss +
+  `continue`; context/compaction → `/compact`.
+- **Codex** has no equivalent revival — its usage-limit banner points at upgrading and its
+  context-full says "start a new thread"; it auto-retries transient errors itself. So its rules
+  `alert`: the nudger *detects* the wedged state precisely (`usage-limit` / `out-of-credits` /
+  `context-full`, strings lifted from `codex.exe`) and the monitor abandons the run with a clear
+  reason instead of burning the slot to timeout. It never blind-injects into Codex.
+- **Working / ambiguous** → nothing. Classification runs only on a confirmed prompt match.
 
-**Where it runs matters:** `AttachConsole` cannot cross the session-0 boundary, so the nudger only
-works from the **in-session monitor** (`nightshift run`/`shift`, running in your interactive
-session), not from the LocalSystem watchdog *service*. The monitor calls it on a probe cooldown
-(`nudge_probe_cooldown_seconds`, default 300s); `max_run_seconds` is the backstop. Claude-only for
-now (the prompt strings are Claude Code's); other tools fall through to alerting. The console
-read/inject reuses the proven kernel32 `ReadConsoleOutputCharacter` / `WriteConsoleInput` technique;
-results come back via a temp file because `AttachConsole` hijacks stdout.
+`nudge_console.ps1` is a dumb console primitive (`-Action read|send`); all classification is in
+Python (testable, rule-driven). Results come back via a temp file because `AttachConsole` hijacks
+stdout. **Where it runs matters:** `AttachConsole` cannot cross the session-0 boundary, so the nudger
+works only from the **in-session monitor** (`nightshift run`/`shift`), not the LocalSystem watchdog
+*service*. Probe frequency is bounded by `nudge_probe_cooldown_seconds` (default 300s);
+`max_run_seconds` is the backstop. The read/inject reuses the proven kernel32
+`ReadConsoleOutputCharacter` / `WriteConsoleInput` technique.
 
 ## Run it as a plain module, not a service (for now)
 

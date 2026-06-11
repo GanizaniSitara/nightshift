@@ -152,13 +152,24 @@ def monitor_run(
             last_probe = time.monotonic()
             pid = session_pid(slug, config)
             if pid:
-                res = probe_and_nudge(pid, tool=run.tool, apply=True)
+                res = probe_and_nudge(pid, tool=run.tool, apply=True, config=config)
                 if res.nudged:
                     nudge_count += 1
                     if on_poll:
                         on_poll(f"NUDGE: {res.state} -> {res.action} (verified={res.verified})")
                     _note(config, task_id,
                           f"Session was parked on {res.state}; sent {res.action} (verified={res.verified}).")
+                elif res.needs_human:
+                    # A detected stuck state with no auto-revival (e.g. Codex usage
+                    # cap). Don't burn the slot to timeout — flag precisely and stop.
+                    _note(config, task_id,
+                          f"Session hit {res.state} ({run.tool}); this tool won't self-resume — "
+                          f"abandoning the run for review (try a different seat or wait for reset).")
+                    run.status = RunStatus.STALLED
+                    run.notes = f"{res.state}: {run.tool} won't self-resume (needs you)"
+                    if on_poll:
+                        on_poll(f"STUCK: {res.state} ({run.tool}) — needs you; stopping run")
+                    break
                 elif res.state == "attach-failed" and on_poll:
                     on_poll("nudge probe: attach-failed (monitor must run in the session, not session 0)")
 

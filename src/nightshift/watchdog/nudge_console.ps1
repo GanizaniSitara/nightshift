@@ -1,32 +1,27 @@
 <#
 .SYNOPSIS
-    Probe a console's last lines, classify a recoverable "stuck" prompt, and
-    optionally inject the keystroke that revives it. PID-only; no personal paths.
+    Dumb console primitive: read a console's visible tail, or inject text into it.
+    PID-only; no personal paths; no classification (that lives in nudger.py).
 
-    Used by Nightshift's nudger to unstick a managed agent session that has
-    parked on a rate-limit or context-compaction prompt overnight. Must run in
-    the SAME interactive session as the target console (AttachConsole cannot
-    cross the session-0 boundary), so this is invoked by the in-session monitor,
-    never by the LocalSystem watchdog service.
+    Used by Nightshift's nudger to read a managed agent session's screen and, when
+    Python decides it's parked on a recoverable prompt, type the revival keystroke.
+    Must run in the SAME interactive session as the target (AttachConsole cannot
+    cross the session-0 boundary), so it's invoked by the in-session monitor, never
+    by the LocalSystem watchdog service.
 
-.PARAMETER CmdPid
-    PID of the cmd.exe (or console host) whose buffer to read/inject into.
-
-.PARAMETER Apply
-    When set, inject the revival keystrokes. Otherwise probe + classify only.
+.PARAMETER Action
+    'read' -> write {ok, tail} to OutFile.  'send' -> inject -Text, write {ok}.
 
 .OUTPUTS
-    One JSON line: {"state":"...","action":"...","verified":<bool>}
-    state: rate-limit | context-limit | working-or-unknown | attach-failed
+    JSON written to -OutFile (stdout is unusable after AttachConsole hijacks it).
 #>
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)][int]$CmdPid,
+    [ValidateSet('read', 'send')][string]$Action = 'read',
     [int]$Lines = 30,
-    [switch]$Apply,
-    # Result JSON is written here. Required for programmatic use: after AttachConsole
-    # the process's stdout is hijacked to the target console, so it cannot be piped back.
-    [string]$OutFile = ''
+    [string]$Text = '',
+    [Parameter(Mandatory = $true)][string]$OutFile
 )
 
 $ErrorActionPreference = 'Stop'
@@ -95,45 +90,13 @@ public static class ConIO {
 }
 '@
 
-function Classify([string]$text) {
-    if (-not $text) { return 'attach-failed' }
-    $rate = ($text -match "You've hit your limit" -or $text -match 'usage limit') -and `
-            ($text -match 'What do you want to do\?' -or $text -match '/rate-limit-options' -or `
-             $text -match 'upgrade to increase your usage limit' -or $text -match 'resets\s+\d{1,2}:\d{2}')
-    if ($rate) { return 'rate-limit' }
-    $ctx = ($text -match 'context window' -or $text -match 'compaction' -or `
-            $text -match 'compact the conversation' -or ($text -match 'token' -and $text -match 'limit'))
-    if ($ctx) { return 'context-limit' }
-    return 'working-or-unknown'
-}
-
-$tail = [ConIO]::Tail([uint32]$CmdPid, $Lines)
-$state = Classify $tail
-$action = 'none'
-$verified = $false
-
-if ($Apply -and ($state -eq 'rate-limit' -or $state -eq 'context-limit')) {
-    if ($state -eq 'context-limit') {
-        $sent = [ConIO]::Send([uint32]$CmdPid, '/compact')
-        $action = if ($sent) { 'compact-sent' } else { 'inject-failed' }
-    } else {
-        # Rate limit: dismiss the prompt (bare Enter) then type "continue".
-        [void][ConIO]::Send([uint32]$CmdPid, '')
-        Start-Sleep -Milliseconds 350
-        $sent = [ConIO]::Send([uint32]$CmdPid, 'continue')
-        $action = if ($sent) { 'continue-sent' } else { 'inject-failed' }
-    }
-    if ($action -ne 'inject-failed') {
-        Start-Sleep -Milliseconds 700
-        $after = [ConIO]::Tail([uint32]$CmdPid, $Lines)
-        $verified = ((Classify $after) -eq 'working-or-unknown')
-    }
-}
-
-[ConIO]::FreeConsole() | Out-Null  # release the attached console before any further I/O
-$result = [pscustomobject]@{ state = $state; action = $action; verified = $verified } | ConvertTo-Json -Compress
-if ($OutFile) {
-    [System.IO.File]::WriteAllText($OutFile, $result, [System.Text.Encoding]::UTF8)
+if ($Action -eq 'read') {
+    $tail = [ConIO]::Tail([uint32]$CmdPid, $Lines)
+    $obj = [pscustomobject]@{ ok = ($null -ne $tail); tail = [string]$tail }
 } else {
-    Write-Output $result
+    $sent = [ConIO]::Send([uint32]$CmdPid, $Text)
+    $obj = [pscustomobject]@{ ok = [bool]$sent; tail = '' }
 }
+
+[ConIO]::FreeConsole() | Out-Null
+[System.IO.File]::WriteAllText($OutFile, ($obj | ConvertTo-Json -Compress), [System.Text.Encoding]::UTF8)

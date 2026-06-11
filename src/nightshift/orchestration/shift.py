@@ -193,7 +193,12 @@ def monitor_run(
     if run.status == RunStatus.DONE and increment.target and increment.rubric_path:
         verifier = registry.get(increment.deliverable_type)
         if verifier is not None:
-            result = verifier.verify(increment, config=config)
+            try:
+                result = verifier.verify(increment, config=config)
+            except Exception as exc:  # a verifier fault must not crash the shift
+                run.status = RunStatus.NEEDS_REVIEW
+                run.notes = (run.notes + "; " if run.notes else "") + f"verifier error: {type(exc).__name__}: {exc}"[:200]
+                return run
             run.evidence_paths.extend(result.evidence_paths)
             run.status = RunStatus.VERIFIED if result.verdict == Verdict.PASS else RunStatus.NEEDS_REVIEW
             run.notes = (run.notes + "; " if run.notes else "") + f"verifier verdict={result.verdict.value}"

@@ -10,6 +10,10 @@ deliverable type and the check needs no physical device or human taste.
 from .base import Increment, Verdict, Verifier, VerificationResult, VisionFinding
 from . import registry
 
+# Import the bundled reference verifiers so they self-register on package import.
+# (Imports are cheap: playwright is loaded lazily inside the web capture, not here.)
+from . import web, cli, ios, pdf  # noqa: E402,F401
+
 __all__ = [
     "Increment",
     "Verdict",

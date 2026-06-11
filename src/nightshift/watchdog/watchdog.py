@@ -591,6 +591,31 @@ class TasksMcpClient:
         if isinstance(parsed, dict) and parsed.get("error"):
             raise McpError(json.dumps(parsed["error"], ensure_ascii=False))
 
+    def create_task(self, prefix: str, title: str, body: str, priority: str = "P4") -> dict[str, Any]:
+        """Create a task; returns the server's task payload (id, path, frontmatter...)."""
+        if not self.session_id:
+            self.initialize()
+        payload = {
+            "jsonrpc": "2.0",
+            "id": self._next_id(),
+            "method": "tools/call",
+            "params": {
+                "name": "create_task",
+                "arguments": {"prefix": prefix, "title": title, "body": body, "priority": priority},
+            },
+        }
+        _, body_text = self._post(payload)
+        parsed = parse_mcp_response(body_text)
+        if not isinstance(parsed, dict):
+            raise McpError("create_task: unparseable response")
+        if parsed.get("error"):
+            raise McpError(json.dumps(parsed["error"], ensure_ascii=False))
+        for item in (parsed.get("result") or {}).get("content", []):
+            if item.get("type") == "text":
+                data = json.loads(item["text"])
+                return data.get("task", data)
+        raise McpError("create_task: no content in response")
+
     def move_task(self, task_id: str, status: str, strategy: str = "error") -> None:
         """Move a task between backlog/in-progress/blocked/done (frontmatter + file together)."""
         if not self.session_id:

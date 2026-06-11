@@ -35,13 +35,25 @@ MANAGED_MARKERS: dict[str, Any] = {"RunnerManaged": True, "ManagedBy": "nightshi
 CONTRACT_PATH = Path(__file__).resolve().parents[1] / "worker" / "contract.md"
 
 
-def build_run_prompt(increment: Increment, *, contract_text: str | None = None) -> str:
-    """Assemble worker contract + step brief + done-signal instructions."""
+def build_run_prompt(
+    increment: Increment,
+    *,
+    contract_text: str | None = None,
+    goal_context: str | None = None,
+) -> str:
+    """Assemble worker contract + step brief + done-signal instructions.
+
+    ``goal_context`` is the coherence thread for goal shifts: the goal intent,
+    the shared workspace/branch, and what previous increments accomplished —
+    so each worker builds ON the last one instead of starting cold.
+    """
     contract = contract_text if contract_text is not None else CONTRACT_PATH.read_text(encoding="utf-8")
     criteria = "\n".join(f"- {c}" for c in increment.acceptance_criteria) or "- (none stated)"
+    goal_block = f"### Goal context\n\n{goal_context}\n\n" if goal_context else ""
     return (
         "## Managed run brief (Nightshift)\n\n"
         "This session is a MANAGED RUN. Follow the worker contract below exactly.\n\n"
+        f"{goal_block}"
         f"### Your increment\n\n{increment.summary}\n\n"
         f"### Acceptance criteria\n\n{criteria}\n\n"
         "### Heartbeat and done signal\n\n"
@@ -101,7 +113,13 @@ def save_run_record(run: Run, config: dict[str, Any], extra: dict[str, Any] | No
     return path
 
 
-def dispatch_run(increment: Increment, *, tool: str | None = None, config: dict[str, Any]) -> Run:
+def dispatch_run(
+    increment: Increment,
+    *,
+    tool: str | None = None,
+    config: dict[str, Any],
+    goal_context: str | None = None,
+) -> Run:
     """Launch a managed run for an increment. ``increment.id`` is the task slug."""
     slug = increment.id
     tool = tool or str(config.get("default_tool", "claude"))
@@ -131,7 +149,7 @@ def dispatch_run(increment: Increment, *, tool: str | None = None, config: dict[
         client.move_task(task_id, "in-progress")
 
     # 2. Deliver contract + brief through the ticket (launcher injects task file verbatim).
-    prompt = build_run_prompt(increment)
+    prompt = build_run_prompt(increment, goal_context=goal_context)
     client.append_task_note(task_id, prompt, heading="Managed run")
 
     # 3. Fire the launcher.

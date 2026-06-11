@@ -16,6 +16,8 @@
   "default_tool": "claude",
   "max_run_seconds": 7200,
   "launch_info_timeout_seconds": 30,
+  "nudge_enabled": true,
+  "nudge_probe_cooldown_seconds": 300,
   "runs_dir": "state/runs",
   "reports_dir": "state/reports",
   "evidence_dir": "state/evidence",

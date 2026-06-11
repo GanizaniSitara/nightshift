@@ -64,17 +64,42 @@ def task_is_done(slug: str, config: dict[str, Any]) -> bool:
     return any(done_dir.glob(f"{slug}*.md"))
 
 
-def session_alive(slug: str, config: dict[str, Any]) -> bool | None:
-    """True/False if determinable from launch-info; None if no launch-info exists."""
-    from ..watchdog.watchdog import check_process, load_launch_info
+def _launch_info(slug: str, config: dict[str, Any]):
+    from ..watchdog.watchdog import load_launch_info
 
     path = Path(str(config.get("tasks_root", ""))) / "in-progress" / f"{slug}.launch-info.json"
     if not path.exists():
         return None
-    info = load_launch_info(path)
+    return load_launch_info(path)
+
+
+def session_alive(slug: str, config: dict[str, Any]) -> bool | None:
+    """True/False if determinable from launch-info; None if no launch-info exists."""
+    from ..watchdog.watchdog import check_process
+
+    info = _launch_info(slug, config)
     if info is None:
         return None
     return check_process(info, float(config.get("process_start_tolerance_seconds", 5))).alive
+
+
+def session_pid(slug: str, config: dict[str, Any]) -> int:
+    info = _launch_info(slug, config)
+    return info.pid if info else 0
+
+
+def _note(config: dict[str, Any], task_id: str, note: str) -> None:
+    """Best-effort progress note to the ticket (also bumps heartbeat)."""
+    from ..watchdog.watchdog import TasksMcpClient
+
+    try:
+        client = TasksMcpClient(
+            str(config.get("mcp_url", "http://127.0.0.1:8876/mcp")),
+            float(config.get("mcp_timeout_seconds", 10)),
+        )
+        client.append_task_note(task_id, note, heading="Nightshift nudge")
+    except Exception:
+        pass
 
 
 def monitor_run(
@@ -91,10 +116,18 @@ def monitor_run(
     CRASHED (session process gone before done), STALLED with a timeout note
     (max_run_seconds exceeded — recorded, never killed: no auto-kill by design).
     """
+    from ..watchdog.watchdog import task_id_from_slug
+    from ..watchdog.nudger import probe_and_nudge
+
     poll_seconds = float(config.get("poll_seconds", 60))
     max_seconds = float(config.get("max_run_seconds", 7200))
+    nudge_enabled = bool(config.get("nudge_enabled", True))
+    nudge_cooldown = float(config.get("nudge_probe_cooldown_seconds", 300))
     slug = increment.id
+    task_id = task_id_from_slug(slug) or slug
     started = time.monotonic()
+    last_probe = started  # first probe one cooldown in (a fresh session can't be rate-limited yet)
+    nudge_count = 0
 
     while True:
         if task_is_done(slug, config):
@@ -109,9 +142,32 @@ def monitor_run(
             run.status = RunStatus.STALLED
             run.notes = f"timeout after {int(max_seconds)}s (run left alive; review manually)"
             break
+
+        # Auto-unstick: every cooldown, peek the console; if it's parked on a
+        # rate-limit / compaction prompt, revive it ("just say continue"). Only
+        # ever acts on a CONFIRMED recoverable prompt, never a working session.
+        # Probe frequency is bounded by the cooldown, and max_run_seconds is the
+        # backstop — no nudge storm.
+        if nudge_enabled and (time.monotonic() - last_probe) >= nudge_cooldown:
+            last_probe = time.monotonic()
+            pid = session_pid(slug, config)
+            if pid:
+                res = probe_and_nudge(pid, tool=run.tool, apply=True)
+                if res.nudged:
+                    nudge_count += 1
+                    if on_poll:
+                        on_poll(f"NUDGE: {res.state} -> {res.action} (verified={res.verified})")
+                    _note(config, task_id,
+                          f"Session was parked on {res.state}; sent {res.action} (verified={res.verified}).")
+                elif res.state == "attach-failed" and on_poll:
+                    on_poll("nudge probe: attach-failed (monitor must run in the session, not session 0)")
+
         if on_poll:
-            on_poll(f"waiting: done={False} alive={alive}")
+            on_poll(f"waiting: done=False alive={alive}")
         sleep(poll_seconds)
+
+    if nudge_count:
+        run.notes = (run.notes + "; " if run.notes else "") + f"auto-nudged {nudge_count}x"
 
     run.ended_at = dt.datetime.now(dt.timezone.utc).isoformat()
 

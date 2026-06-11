@@ -13,6 +13,24 @@ It de-dupes alerts per episode (one alert per stall, not one per poll), gates al
 markers so ad-hoc sessions don't generate noise, and emits a ticket note + optional email. It
 **observes and alerts only** — no restart, no kill.
 
+## Auto-unstick nudger (`nudger.py` + `nudge_console.ps1`)
+
+The dominant overnight failure on subscription seats is the rate-limit pause: the session parks on a
+prompt forever waiting for a human. The nudger revives it — it peeks the session's console and, on a
+**confirmed** recoverable prompt, injects the keystroke that resumes it:
+
+- rate-limit prompt → dismiss + type `continue`
+- context/compaction prompt → `/compact`
+- working / no prompt → nothing (it never injects into a healthy or ambiguous session)
+
+**Where it runs matters:** `AttachConsole` cannot cross the session-0 boundary, so the nudger only
+works from the **in-session monitor** (`nightshift run`/`shift`, running in your interactive
+session), not from the LocalSystem watchdog *service*. The monitor calls it on a probe cooldown
+(`nudge_probe_cooldown_seconds`, default 300s); `max_run_seconds` is the backstop. Claude-only for
+now (the prompt strings are Claude Code's); other tools fall through to alerting. The console
+read/inject reuses the proven kernel32 `ReadConsoleOutputCharacter` / `WriteConsoleInput` technique;
+results come back via a temp file because `AttachConsole` hijacks stdout.
+
 ## Run it as a plain module, not a service (for now)
 
 The default is on-demand: `python -m nightshift.watchdog status | once | loop`. A long-running

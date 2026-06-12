@@ -23,6 +23,10 @@
   "evidence_dir": "state/evidence",
   "eval_tool": "claude",
   "eval_model": "sonnet",
+  "web_full_page": true,
+  "nav_timeout_ms": 60000,
+  "screenshot_timeout_ms": 60000,
+  "_serve_cmd_note": "Server-rendered goals set serve_cmd in goal.md (not here); the verifier restarts the app from the current branch before screenshotting.",
 
   "watchdog_note_grace_seconds": 60,
   "alert_requires_managed": true,

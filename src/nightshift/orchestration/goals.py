@@ -39,6 +39,7 @@ class GoalSpec:
     tool: str | None = None
     task_prefix: str = "TECH"
     status: str = "draft"
+    serve_cmd: str | None = None  # for server-rendered apps: how the verifier restarts it
     path: Path | None = None
     increments: list["IncrementSpec"] = field(default_factory=list)
 
@@ -124,6 +125,7 @@ def load_goal(goals_dir: str | Path, goal_id: str) -> GoalSpec:
         tool=meta.get("tool", "").strip() or None,
         task_prefix=meta.get("task_prefix", "TECH").strip() or "TECH",
         status=meta.get("status", "draft").strip() or "draft",
+        serve_cmd=meta.get("serve_cmd", "").strip() or None,
         path=goal_dir,
     )
     inc_dir = goal_dir / "increments"

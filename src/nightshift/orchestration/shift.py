@@ -191,6 +191,17 @@ def monitor_run(
             leftover.unlink()
 
     if run.status == RunStatus.DONE and increment.target and increment.rubric_path:
+        # Server-rendered app: restart it from the current branch before capture,
+        # so the verifier judges the just-committed code (not a stale instance).
+        serve_cmd = config.get("serve_cmd")
+        if serve_cmd:
+            from urllib.parse import urlparse
+            from ..serve import restart_app
+
+            port = urlparse(increment.target).port or 80
+            r = restart_app(serve_cmd, port)
+            if on_poll:
+                on_poll(f"restarted app on :{port} for verify (ok={r.get('ok')}, killed={r.get('killed')})")
         verifier = registry.get(increment.deliverable_type)
         if verifier is not None:
             try:

@@ -114,6 +114,8 @@ def run_shift(
     started_iso = dt.datetime.now(dt.timezone.utc).isoformat()
     config = dict(config)
     config["shift_id"] = f"shift-{goal.id}"
+    if goal.serve_cmd:
+        config["serve_cmd"] = goal.serve_cmd
 
     if goal.repo and goal.branch:
         state = ensure_goal_branch(goal.repo, goal.branch)

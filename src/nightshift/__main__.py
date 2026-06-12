@@ -100,7 +100,7 @@ def cmd_shift(args: argparse.Namespace) -> int:
             print(f"  {spec.order:02d} {spec.slug} ({spec.deliverable_type}){gate}")
         return 0
 
-    results, report = run_shift(goal, config, max_increments=args.max_increments)
+    results, report = run_shift(goal, config, max_increments=args.max_increments, start_at=args.start_at)
 
     reports_dir = Path(str(config.get("reports_dir", "state/reports")))
     reports_dir.mkdir(parents=True, exist_ok=True)
@@ -179,6 +179,7 @@ def main(argv: list[str] | None = None) -> int:
     shift_p.add_argument("--goals-dir", default=None)
     shift_p.add_argument("--config", default=None)
     shift_p.add_argument("--max-increments", type=int, default=None)
+    shift_p.add_argument("--start-at", type=int, default=1, help="1-based: skip earlier increments already landed")
     shift_p.add_argument("--dry-run", action="store_true", help="list the plan; run nothing")
     shift_p.set_defaults(func=cmd_shift)
 

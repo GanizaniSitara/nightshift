@@ -108,9 +108,14 @@ def run_shift(
     config: dict[str, Any],
     *,
     max_increments: int | None = None,
+    start_at: int = 1,
     on_event: Callable[[str], None] = print,
 ) -> tuple[list[tuple[IncrementSpec, Run, str]], str]:
-    """Execute the goal's increments sequentially. Returns (results, report_text)."""
+    """Execute the goal's increments sequentially. Returns (results, report_text).
+
+    ``start_at`` (1-based) skips earlier increments already landed in a prior run,
+    so a resume doesn't re-run verified work.
+    """
     started_iso = dt.datetime.now(dt.timezone.utc).isoformat()
     config = dict(config)
     config["shift_id"] = f"shift-{goal.id}"
@@ -128,7 +133,10 @@ def run_shift(
 
     results: list[tuple[IncrementSpec, Run, str]] = []
     stop_reason = ""
-    todo = goal.increments[: max_increments or len(goal.increments)]
+    start_idx = max(0, start_at - 1)
+    end_idx = start_idx + (max_increments or len(goal.increments))
+    todo = goal.increments[start_idx:end_idx]
+    config["_start_at"] = start_at
 
     for spec in todo:
         eligible, why = _unattended_eligible(spec)
@@ -176,7 +184,7 @@ def run_shift(
             stop_reason = f"{spec.slug} needs review; not building further on an unverified base"
             break
 
-    report = render_goal_report(goal, results, started_iso, stop_reason)
+    report = render_goal_report(goal, results, started_iso, stop_reason, start_at=start_at)
     return results, report
 
 
@@ -194,6 +202,7 @@ def render_goal_report(
     results: list[tuple[IncrementSpec, Run, str]],
     started_iso: str,
     stop_reason: str,
+    start_at: int = 1,
 ) -> str:
     lines = [
         f"GOAL SHIFT REPORT — {goal.title} ({goal.id})",
@@ -210,12 +219,15 @@ def render_goal_report(
     lines.append("")
 
     done_count = sum(1 for _, run, _ in results if run.status in TERMINAL_OK)
-    lines.append(f"increments: {done_count}/{len(goal.increments)} landed")
+    lines.append(f"increments this run: {done_count}/{len(results)} landed (of {len(goal.increments)} total)")
+    start_idx = max(0, start_at - 1)
+    for spec in goal.increments[:start_idx]:
+        lines.append(f"  {spec.order:02d} {spec.slug}: skipped (landed in a prior run)")
     for spec, run, ticket in results:
         note = f" — {run.notes}" if run.notes else ""
         lines.append(f"  {spec.order:02d} {spec.slug}: {run.status.value} [{_duration(run)}] (ticket {ticket}){note}")
 
-    remaining = goal.increments[len(results):]
+    remaining = goal.increments[start_idx + len(results):]
     for spec in remaining:
         lines.append(f"  {spec.order:02d} {spec.slug}: not started")
 
